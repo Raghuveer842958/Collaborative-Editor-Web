@@ -5,8 +5,9 @@ import { javascript } from "@codemirror/lang-javascript";
 import { oneDark } from "@codemirror/theme-one-dark";
 import { useSelector } from "react-redux";
 import { createSocketConnection } from "../utils/socket";
-import axios from "axios";
-import { BASE_URL } from "../utils/constants";
+import VideoCall from "./VideoCall";
+
+import { PanelGroup, Panel, PanelResizeHandle } from "react-resizable-panels";
 
 const Editor = () => {
   const { roomId } = useParams();
@@ -15,6 +16,15 @@ const Editor = () => {
   const user = useSelector((store) => store?.user);
   const [langId, setLangId] = useState(50);
   const [output, setOutput] = useState("");
+
+  const [userStreams, setUserStreams] = useState({});
+
+  const handleUserStream = (userId, stream) => {
+    setUserStreams((prev) => ({
+      ...prev,
+      [userId]: stream,
+    }));
+  };
 
   const supportedLanguage = [
     {
@@ -152,73 +162,114 @@ const Editor = () => {
       console.log("Error in executing the code :", error.message);
     }
   };
-
   return (
-    <div className="h-screen flex">
-      {/* Left Sidebar for Users */}
-      <div className="w-[10%] bg-gray-900 text-white p-4">
-        <h3 className="text-lg font-bold mb-2">Users</h3>
-        <div className="flex flex-col gap-2">
-          {connectedUsers.length > 0 ? (
-            connectedUsers.map((user, index) => (
-              <button
-                key={index}
-                className={`flex items-center gap-2 px-4 py-2 rounded text-sm
-              ${
-                user.isOwner
-                  ? "bg-yellow-600 text-white font-bold"
-                  : "bg-gray-700 hover:bg-gray-600"
-              }`}
-              >
-                <span className="text-green-400 text-xs">🟢</span>
-                {user.name}
-              </button>
-            ))
-          ) : (
-            <p className="text-sm italic">No users connected</p>
-          )}
-        </div>
-      </div>
-
-      {/* Right Section - Code Editor */}
-      <div className="w-[90%] ">
-        <div className="flex justify-between">
-          <div className="flex ">
-            {supportedLanguage.map((lang) => (
-              <div
-                onClick={() => changeLanguage(roomId, lang.id)}
-                key={lang.id}
-              >
-                <LanguageIcon name={lang.name} id={lang.id} />
-              </div>
-            ))}
+    <div className="h-screen w-screen overflow-hidden">
+      <PanelGroup direction="horizontal" className="h-full w-full">
+        {/* Left Sidebar Panel */}
+        <Panel defaultSize={20} minSize={10} maxSize={30}>
+          <div className="h-full bg-gray-900 text-white p-4 overflow-y-auto">
+            <h3 className="text-lg font-bold mb-4">Participants</h3>
+            <div className="flex flex-col gap-4">
+              {connectedUsers.length > 0 ? (
+                connectedUsers.map((userObj, index) => (
+                  <div key={index} className="flex flex-col items-center">
+                    <span
+                      className={`text-sm mb-1 font-semibold ${
+                        userObj.isOwner ? "text-yellow-400" : "text-white"
+                      }`}
+                    >
+                      {userObj.name}
+                    </span>
+                    {userStreams[userObj.id] ? (
+                      <video
+                        autoPlay
+                        playsInline
+                        muted={user?.user?._id === userObj.id}
+                        ref={(videoEl) => {
+                          if (videoEl)
+                            videoEl.srcObject = userStreams[userObj.id];
+                        }}
+                        className="w-full h-24 rounded-md border border-white"
+                      />
+                    ) : (
+                      <div className="w-full h-24 bg-gray-700 rounded-md flex items-center justify-center text-xs text-gray-300">
+                        No video
+                      </div>
+                    )}
+                  </div>
+                ))
+              ) : (
+                <p className="text-sm italic">No users connected</p>
+              )}
+            </div>
           </div>
-          <button
-            className="border border-black rounded-md px-6 py-1 m-1 bg-green-500"
-            onClick={handleRunCode}
-          >
-            Run
-          </button>
-        </div>
-        <CodeMirror
-          value={code}
-          height="350px"
-          theme={oneDark}
-          extensions={[javascript()]}
-          onChange={handleCodeChange}
-        />
+        </Panel>
 
-        <OutputSection result={output} />
-      </div>
+        <PanelResizeHandle className="w-1 bg-gray-700 cursor-col-resize" />
+
+        {/* Editor + Output Section */}
+        <Panel defaultSize={80} minSize={50}>
+          <PanelGroup direction="vertical" className="h-full w-full">
+            {/* Code Editor Section */}
+            <Panel defaultSize={70} minSize={40}>
+              <div className="flex flex-col h-full">
+                {/* Language Select + Run Button */}
+                <div className="flex justify-between p-2">
+                  <div className="flex">
+                    {supportedLanguage.map((lang) => (
+                      <div
+                        onClick={() => changeLanguage(roomId, lang.id)}
+                        key={lang.id}
+                      >
+                        <LanguageIcon name={lang.name} id={lang.id} />
+                      </div>
+                    ))}
+                  </div>
+                  <button
+                    className="border border-black rounded-md px-6 py-1 m-1 bg-green-500"
+                    onClick={handleRunCode}
+                  >
+                    Run
+                  </button>
+                </div>
+
+                <VideoCall
+                  roomId={roomId}
+                  user={user}
+                  onUserStream={handleUserStream}
+                />
+
+                {/* 👇 Scrollable code editor area */}
+                <div className="flex-1 overflow-auto">
+                  <CodeMirror
+                    value={code}
+                    height="100%"
+                    theme={oneDark}
+                    extensions={[javascript()]}
+                    onChange={handleCodeChange}
+                  />
+                </div>
+              </div>
+            </Panel>
+
+            <PanelResizeHandle className="h-1 bg-gray-700 cursor-row-resize" />
+
+            {/* Output Section */}
+            <Panel defaultSize={30} minSize={10}>
+              <OutputSection result={output} />
+            </Panel>
+          </PanelGroup>
+        </Panel>
+      </PanelGroup>
     </div>
   );
 };
 
 const OutputSection = ({ result }) => {
   return (
-    <div className="h-40 border border-black m-2 bg-white rounded-md">
-      <h1>Output:</h1>
-      <h1 className="text-red-500">{result}</h1>
+    <div className="w-full h-full overflow-auto border border-black m-2 bg-white rounded-md p-2">
+      <h1 className="font-semibold mb-2">Output:</h1>
+      <pre className="text-red-500 whitespace-pre-wrap">{result}</pre>
     </div>
   );
 };
